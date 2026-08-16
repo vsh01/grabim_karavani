@@ -1,0 +1,12 @@
+{
+  "name": "grabim-karavani",
+  "version": "0.1.0",
+  "description": "3D-экшон о лесных эльфах, страже дворца и Злодее. Можно грабить корованы.",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "dev": "node tools/serve.js"
+  },
+  "license": "MIT",
+  "private": true
+}

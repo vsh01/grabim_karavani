@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Грабим корованы</title>
+<link rel="stylesheet" href="src/ui/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>&#127794;</text></svg>">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js",
+    "three.core": "./vendor/three/three.core.min.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="viewport"></canvas>
+
+<!-- Наложения поверх 3D: повязка на глаз, кровь, затемнение -->
+<div id="overlays">
+  <div id="eye-patch" class="hidden"></div>
+  <div id="blood-vignette"></div>
+  <div id="fade" class="hidden"></div>
+</div>
+
+<!-- Игровой интерфейс -->
+<div id="hud" class="hidden">
+  <div id="hud-left">
+    <div class="bar-row"><span class="bar-label">ЖИЗНЬ</span><div class="bar"><i id="bar-hp"></i></div></div>
+    <div class="bar-row"><span class="bar-label">СИЛЫ</span><div class="bar"><i id="bar-stam"></i></div></div>
+    <div id="status-icons"></div>
+  </div>
+  <div id="hud-right">
+    <div id="gold-line"><span class="coin">✦</span> <span id="gold-value">0</span></div>
+    <div id="zone-line">—</div>
+    <div id="faction-line">—</div>
+  </div>
+  <div id="crosshair">+</div>
+  <div id="objective-panel">
+    <div id="objective-title">ЗАДАЧА</div>
+    <div id="objective-text">—</div>
+  </div>
+  <div id="hint"></div>
+  <div id="log"></div>
+  <div id="weapon-line">—</div>
+</div>
+
+<!-- Полноэкранные панели: меню, магазин, инвентарь, карта -->
+<div id="screen" class="hidden"></div>
+
+<div id="boot">
+  <div class="boot-inner">
+    <h1>ГРАБИМ КОРОВАНЫ</h1>
+    <p id="boot-status">Загрузка движка…</p>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+<noscript><p style="color:#fff">Нужен включённый JavaScript.</p></noscript>
+</body>
+</html>
