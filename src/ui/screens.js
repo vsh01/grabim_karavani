@@ -205,6 +205,7 @@ export class Screens {
             <tr><td>Карта</td><td>M</td></tr>
             <tr><td>Перевязать (бинт)</td><td>B</td></tr>
             <tr><td>Выпить зелье</td><td>H</td></tr>
+            <tr><td>Звук вкл/выкл</td><td>N</td></tr>
             <tr><td>Пауза / меню</td><td>Esc</td></tr>
           </table>
           <div class="col-title" style="margin-top:16px">ГЛАВНОЕ ПРО УВЕЧЬЯ</div>

@@ -82,6 +82,15 @@ export class Combat {
     return results;
   }
 
+  /** Свист оружия в момент замаха. */
+  playSwing(attacker) {
+    this.game.audio.play('swoosh', {
+      position: attacker.isPlayer ? undefined : attacker.position,
+      volume: attacker.isPlayer ? 0.55 : 0.45,
+      rate: 0.85 + Math.random() * 0.3,
+    });
+  }
+
   /** Общая часть для ближнего и дальнего боя. */
   resolveHit(attacker, target, weapon, part, eye, powerScale = 1) {
     const base = weapon.damage * powerScale * (attacker.injuries?.damageMultiplier ?? 1);
@@ -116,6 +125,16 @@ export class Combat {
     target.lastAttacker = attacker;
     if (target.onAttacked) target.onAttacked(attacker);
 
+    // Отбрасывание: без него удар выглядит так, будто цель его не заметила.
+    if (target.alive && target.velocity) {
+      const dx = target.position.x - attacker.position.x;
+      const dz = target.position.z - attacker.position.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const push = Math.min(6, 1.6 + damage * 0.075);
+      target.velocity.x += (dx / d) * push;
+      target.velocity.z += (dz / d) * push;
+    }
+
     this.game.onCombatEvent?.({ type: 'hit', attacker, target, ...res, part });
     return { target, part, ...res };
   }
@@ -133,6 +152,11 @@ export class Combat {
     const mesh = makeArrowMesh();
     mesh.position.copy(origin);
     this.game.world.group.add(mesh);
+    this.game.audio.play('bow', {
+      position: attacker.isPlayer ? undefined : attacker.position,
+      volume: attacker.isPlayer ? 0.7 : 0.5,
+      rate: 0.9 + Math.random() * 0.2,
+    });
 
     this.projectiles.push({
       mesh,
@@ -184,6 +208,7 @@ export class Combat {
 
         const rel = clamp((closest.y - target.position.y) / targetHeight, 0, 1);
         const { part, eye } = partFromHeight(rel, this.rand);
+        this.game.audio.play('tick', { position: closest, volume: 0.8 });
         this.resolveHit(p.owner, target, p.weapon, part, eye, 1);
         consumed = true;
         break;

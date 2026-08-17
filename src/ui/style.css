@@ -76,6 +76,15 @@ html, body {
   transition: opacity 0.25s ease;
 }
 
+/* Красная вспышка по краям экрана в момент попадания по игроку. */
+#hit-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(ellipse at center,
+              rgba(0,0,0,0) 45%, rgba(200,20,20,0.95) 100%);
+}
+
 #fade {
   position: absolute;
   inset: 0;
@@ -84,6 +93,92 @@ html, body {
   transition: opacity 0.6s ease;
 }
 #fade.on { opacity: 1; }
+
+/* ─── цифры урона ─── */
+
+#damage-popups {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.dmg-popup {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 19px;
+  font-weight: bold;
+  color: #ffe9a8;
+  text-shadow: 0 2px 4px #000, 0 0 8px rgba(0,0,0,0.8);
+  white-space: nowrap;
+}
+.dmg-popup.crit { color: #ffd24a; font-size: 25px; }
+.dmg-popup.gore { color: #ff6a58; font-size: 22px; }
+.dmg-popup.taken { color: #ff8a7a; }
+.dmg-popup.big { color: #ffd24a; font-size: 27px; }
+
+/* ─── компас ─── */
+
+#compass {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  width: 420px;
+  height: 26px;
+  overflow: hidden;
+  border-top: 1px solid rgba(200,161,46,0.35);
+  border-bottom: 1px solid rgba(200,161,46,0.35);
+  background: rgba(12,10,7,0.42);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+
+#compass-strip {
+  position: absolute;
+  inset: 0;
+}
+
+.compass-mark {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.compass-mark.card { color: var(--ink); font-size: 14px; font-weight: bold; }
+.compass-mark.caravan { color: #ff8c2a; }
+.compass-mark.goal { color: var(--brass); }
+.compass-mark.home { color: #8fc7e8; }
+
+#compass-needle {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--brass);
+  opacity: 0.85;
+}
+
+/* ─── индикатор боя ─── */
+
+#danger {
+  position: absolute;
+  left: 50%;
+  top: 48px;
+  transform: translateX(-50%);
+  font-size: 13px;
+  letter-spacing: 3px;
+  color: #ff7a68;
+  text-shadow: 0 2px 4px #000;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+#danger.on { opacity: 1; animation: pulse 0.9s infinite; }
 
 /* ─── HUD ─── */
 

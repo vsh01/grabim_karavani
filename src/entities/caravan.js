@@ -237,8 +237,9 @@ export class CaravanManager {
   constructor(game) {
     this.game = game;
     this.caravans = [];
-    this.spawnTimer = 6;
-    this.maxActive = 3;
+    // Корован — главная приманка игры, поэтому их должно быть видно часто.
+    this.spawnTimer = 3;
+    this.maxActive = 5;
     this.robbedCount = 0;
     this.totalLooted = 0;
   }
@@ -246,7 +247,7 @@ export class CaravanManager {
   update(dt) {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      this.spawnTimer = 40 + Math.random() * 50;
+      this.spawnTimer = 14 + Math.random() * 18;
       if (this.caravans.length < this.maxActive) this.spawn();
     }
 

@@ -38,6 +38,12 @@ async function main() {
   setTimeout(() => boot.remove(), 600);
   game.screens.showMainMenu();
 
+  // Браузер не даёт заводить звук до действия пользователя,
+  // поэтому первый же клик или нажатие клавиши поднимает аудиоконтекст.
+  const wakeAudio = () => game.audio.unlock();
+  window.addEventListener('mousedown', wakeAudio);
+  window.addEventListener('keydown', wakeAudio);
+
   // Клик по картинке возвращает захват курсора после меню.
   canvas.addEventListener('mousedown', () => {
     if (game.running && !game.screens.isOpen && game.player?.alive) input.requestLock();

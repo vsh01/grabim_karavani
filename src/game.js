@@ -9,7 +9,9 @@ import { Reputation, FACTIONS, FACTION, factionsHostile } from './systems/factio
 import { OrderSystem, Squad } from './systems/orders.js';
 import { Injuries, LIMB_LABEL, LIMB_ACCUSATIVE, LIMB_GENITIVE } from './systems/injury.js';
 import { Inventory, ITEMS, SLOT, priceFor, prostheticTarget } from './systems/items.js';
-import { ZONE, ZONE_BY_ID } from './world/zones.js';
+import { ZONE, ZONE_BY_ID, CROSSROADS, ROADS } from './world/zones.js';
+import { Audio } from './core/audio.js';
+import { Feedback, flashActor } from './systems/feedback.js';
 import { Hud } from './ui/hud.js';
 import { Screens } from './ui/screens.js';
 import { saveGame, loadGame } from './core/save.js';
@@ -35,6 +37,8 @@ export class Game {
     this.debris = [];
     this.combat = new Combat(this);
     this.caravans = new CaravanManager(this);
+    this.audio = new Audio();
+    this.feedback = new Feedback(engine);
     this.orders = new OrderSystem(this);
     this.reputation = null;
     this.squad = null;
@@ -45,7 +49,7 @@ export class Game {
     this.autosaveTimer = AUTOSAVE_INTERVAL;
     this.time = 0;
     this._respawnTimer = 20;
-    this._pendingWave = null;
+    this._patrolTimer = 25;
   }
 
   // ─────────────────────────── создание мира ───────────────────────────
@@ -58,6 +62,31 @@ export class Game {
 
   get factionName() {
     return FACTIONS[this.player?.faction]?.name || '—';
+  }
+
+  /** Точка текущего задания — её показывает компас. */
+  objectivePoint() {
+    const o = this.orders.current;
+    if (!o || o.done) return null;
+    if (o.point) return o.point;
+    if (o.zone) return ZONE_BY_ID[o.zone]?.hub || null;
+    return null;
+  }
+
+  /** Родное поселение игрока. */
+  homePoint() {
+    const zoneId = FACTIONS[this.player?.faction]?.home;
+    return zoneId ? ZONE_BY_ID[zoneId].hub : null;
+  }
+
+  /** Идёт ли бой прямо сейчас — по этому HUD зажигает надпись «В БОЮ». */
+  get inCombat() {
+    if (!this.player?.alive) return false;
+    for (const a of this.actors) {
+      if (a === this.player || !a.alive) continue;
+      if (a.target === this.player && a.distanceTo?.(this.player) < 45) return true;
+    }
+    return false;
   }
 
   startNewGame(factionId) {
@@ -101,6 +130,7 @@ export class Game {
     for (const d of this.debris) d.object.parent?.remove(d.object);
     this.debris.length = 0;
     this.caravans.clear();
+    this.feedback.clear();
     this.caravans.robbedCount = 0;
     this.caravans.totalLooted = 0;
     this.orders = new OrderSystem(this);
@@ -183,8 +213,12 @@ export class Game {
 
   // ─────────────────────────── игровой цикл ───────────────────────────
 
-  update(dt) {
+  update(dtReal) {
     if (!this.running || !this.world) return;
+
+    // В момент попадания мир на несколько кадров почти замирает — от этого
+    // удар ощущается весомым. Интерфейс и камера при этом живут в реальном времени.
+    const dt = dtReal * this.feedback.consumeTimeScale(dtReal);
     this.time += dt;
 
     const paused = this.screens.isOpen;
@@ -211,14 +245,56 @@ export class Game {
       this.squad?.update();
       this.updateDebris(dt);
       this.updateRespawn(dt);
+      this.updateRoadPatrols(dt);
       this.handleInteraction();
       this.handleHotkeys();
     }
 
     if (this.player) {
       this.world.update(dt, this.player.position, this.time);
-      this.hud.update(this);
+      // Слушатель звука — это камера: так шаги врага слышно с правильной стороны.
+      this.audio.setListener(this.engine.camera.position, this.player.yaw);
+      this.audio.updateAmbient(this.world.currentZone.id, dtReal);
+      this.feedback.update(dtReal, this.engine.camera);
+      // Тряску добавляем поверх уже посчитанной позиции камеры.
+      this.engine.camera.position.add(this.feedback.shakeOffset);
+      this.hud.update(this, dtReal);
       this.hud.setObjective(this.orders.describe());
+    }
+  }
+
+  /**
+   * Бродячие отряды на дорогах.
+   * Без них дорога между зонами — просто долгая прогулка: гарнизоны сидят
+   * по своим углам и на игрока никто не выходит.
+   */
+  updateRoadPatrols(dt) {
+    this._patrolTimer -= dt;
+    if (this._patrolTimer > 0 || !this.player) return;
+    this._patrolTimer = 30 + Math.random() * 40;
+
+    // Отряды нужны только вокруг игрока и только враждебные ему.
+    const hostiles = Object.values(FACTION).filter(
+      (f) => f !== this.player.faction && this.reputation.isHostile(f),
+    );
+    if (!hostiles.length) return;
+
+    // Ищем точку на дороге в 90–190 метрах — далеко, но дойти можно быстро.
+    const road = ROADS[Math.floor(Math.random() * ROADS.length)];
+    const t = Math.random();
+    const rx = road.a.x + (road.b.x - road.a.x) * t;
+    const rz = road.a.z + (road.b.z - road.a.z) * t;
+    const dist = Math.hypot(rx - this.player.position.x, rz - this.player.position.z);
+    if (dist < 90 || dist > 190) return;
+
+    const faction = hostiles[Math.floor(Math.random() * hostiles.length)];
+    const size = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < size; i++) {
+      const pos = this.randomPointNear({ x: rx, z: rz }, 7);
+      const npc = new Npc(this.world, faction, pos, { sightRange: 42, patrolRadius: 26 });
+      // Отряд идёт по дороге к перекрёстку, а не топчется на месте.
+      npc.orderGoto(new THREE.Vector3(CROSSROADS.x, 0, CROSSROADS.z));
+      this.registerNpc(npc);
     }
   }
 
@@ -364,6 +440,8 @@ export class Game {
       return;
     }
     this.caravans.robbedCount++;
+    this.audio.play('coin', { volume: 1 });
+    this.audio.play('levelup', { volume: 0.35, rate: 0.8 });
     const value = res.gold + Object.entries(res.cargo).reduce(
       (sum, [id, n]) => sum + (ITEMS[id]?.price || 0) * n, 0,
     );
@@ -387,7 +465,10 @@ export class Game {
 
   handleHotkeys() {
     const input = this.input;
-    if (input.hit('KeyI')) this.screens.showInventory();
+    if (input.hit('KeyN')) {
+      const on = this.audio.toggle();
+      this.log(on ? 'Звук включён.' : 'Звук выключен.');
+    } else if (input.hit('KeyI')) this.screens.showInventory();
     else if (input.hit('KeyM')) this.screens.showMap();
     else if (input.hit('KeyV')) {
       const fp = this.player.toggleView();
@@ -410,14 +491,41 @@ export class Game {
 
   onCombatEvent(ev) {
     if (ev.type === 'decapitated') {
+      this.audio.play('sever', { position: ev.target.position, volume: 1.1 });
+      this.feedback.spawnBlood(this._chestOf(ev.target), 30, 1.6);
+      this.feedback.requestHitstop(0.1);
+      this.feedback.addShake(0.55);
       if (ev.target === this.player) return;
+      this.feedback.spawnPopup(this._chestOf(ev.target), 'ГОЛОВА С ПЛЕЧ', 'gore');
       this.log(`${ev.target.name}: голова с плеч.`, 'gore');
       return;
     }
     if (ev.type !== 'hit') return;
 
+    const at = this._chestOf(ev.target);
+    const armored = (ev.target.inventory?.armorValue || 0) > 12;
+
+    // Звук удара зависит от того, во что попали.
+    if (ev.severed) {
+      this.audio.play('sever', { position: ev.target.position, volume: 1.0 });
+    } else {
+      this.audio.play(armored ? 'clang' : 'thud', {
+        position: ev.target.position,
+        rate: 0.9 + Math.random() * 0.25,
+      });
+    }
+
+    flashActor(ev.target, ev.severed ? 0xff2010 : 0xff5533, ev.severed ? 1.4 : 1);
+    this.feedback.spawnBlood(at, ev.severed ? 26 : 9, ev.severed ? 1.5 : 1);
+
     if (ev.target === this.player) {
+      // По игроку бьют — трясём камеру и заливаем края красным.
+      this.feedback.addShake(0.5 + Math.min(0.5, ev.damage / 60));
+      this.hud.flashHit(0.5 + Math.min(0.5, ev.damage / 50));
+      this.audio.play('hurt', { volume: 0.9 });
+      this.feedback.spawnPopup(at, `-${Math.round(ev.damage)}`, 'taken');
       if (ev.severed) {
+        this.feedback.requestHitstop(0.12);
         this.log(`Тебе отрубили ${LIMB_ACCUSATIVE[ev.severed]}! Перевяжись бинтом (B), иначе умрёшь.`, 'gore');
       }
       if (ev.eye) {
@@ -425,19 +533,40 @@ export class Game {
       }
       return;
     }
+
     if (ev.attacker === this.player) {
+      // Удар игрока: замирание тем длиннее, чем весомее попадание.
+      const heavy = ev.severed || ev.part === 'head' || ev.damage > 34;
+      this.feedback.requestHitstop(heavy ? 0.075 : 0.035);
+      this.feedback.addShake(heavy ? 0.42 : 0.2);
+      this.feedback.spawnPopup(
+        at,
+        ev.severed ? LIMB_ACCUSATIVE[ev.severed].toUpperCase() : `${Math.round(ev.damage)}`,
+        ev.severed ? 'gore' : ev.part === 'head' ? 'crit' : '',
+      );
       if (ev.severed) this.log(`${ev.target.name} лишился ${LIMB_GENITIVE[ev.severed]}.`, 'gore');
       else if (ev.eye) this.log(`${ev.target.name} лишился глаза.`, 'gore');
     }
   }
 
+  /** Точка на уровне груди — туда бьют брызги и оттуда всплывают цифры. */
+  _chestOf(actor) {
+    return new THREE.Vector3(actor.position.x, actor.position.y + 1.15, actor.position.z);
+  }
+
   onNpcDeath(npc, cause) {
+    this.audio.play('death', { position: npc.position, rate: 0.85 + Math.random() * 0.3 });
     if (npc.lastAttacker === this.player || (this.player && npc.target === this.player && cause === 'bleedout')) {
       const xp = Math.round(npc.maxHealth * 0.6);
       const levels = this.player.addXp(xp);
       this.player.gold += npc.loot;
+      this.audio.play('coin', { volume: 0.7 });
+      this.feedback.spawnPopup(this._chestOf(npc), `+${npc.loot} ✦`, 'big');
       this.log(`${npc.name} убит. +${xp} опыта, +${npc.loot} ✦.`, 'good');
-      if (levels > 0) this.log(`Новый уровень: ${this.player.level}!`, 'good');
+      if (levels > 0) {
+        this.audio.play('levelup', { volume: 0.9 });
+        this.log(`Новый уровень: ${this.player.level}!`, 'good');
+      }
 
       // Убийство своих бьёт по репутации сильнее всего.
       if (npc.faction === this.player.faction) {

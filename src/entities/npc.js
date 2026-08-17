@@ -208,6 +208,10 @@ export class Npc extends Actor {
       if (best) {
         this.target = best;
         this.state = this.timid ? STATE.FLEE : STATE.CHASE;
+        // Оклик при обнаружении: игрок слышит, что его заметили.
+        if (best.isPlayer && !this.timid) {
+          game.audio.play('alert', { position: this.position, volume: 0.8 });
+        }
         if (this.timid) return;
       }
     }
@@ -253,7 +257,7 @@ export class Npc extends Actor {
     }
 
     if (dist > this.attackRange) return { x: dx / dist, z: dz / dist };
-    this.startAttack();
+    if (this.startAttack()) game.combat.playSwing(this);
     return null;
   }
 

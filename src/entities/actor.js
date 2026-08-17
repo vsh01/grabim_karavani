@@ -14,6 +14,7 @@ import { Injuries, MOBILITY } from '../systems/injury.js';
 import { Inventory, ITEMS } from '../systems/items.js';
 import { clamp, lerp, turnTowards } from '../core/utils.js';
 import { makeWeaponMesh } from './props.js';
+import { updateFlash } from '../systems/feedback.js';
 
 export const GRAVITY = 24;
 export const JUMP_SPEED = 8.2;
@@ -277,6 +278,7 @@ export class Actor {
 
   update(dt) {
     this.animTime += dt;
+    updateFlash(this, dt);
 
     if (!this.alive) {
       this.updateCorpse(dt);

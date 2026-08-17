@@ -38,6 +38,8 @@ export class Player extends Actor {
 
     this.blocking = false;
     this.sprinting = false;
+    this._stepDistance = 0;
+    this._wasOnGround = true;
     this.interactTarget = null;
     this.rangedCooldown = 0;
 
@@ -124,8 +126,10 @@ export class Player extends Actor {
     const weapon = this.weapon;
     if (input.mouseHit(0) && !this.blocking) {
       if (weapon.ranged) this.tryShoot(combat, camera);
-      else this.startAttack();
+      else if (this.startAttack()) combat.playSwing(this);
     }
+
+    this._updateFootsteps(dt, combat.game.audio);
 
     // Момент касания в анимации замаха — тогда и наносится урон.
     if (this.attacking && !this.attackHitDone && this.attackProgress > 0.42) {
@@ -136,6 +140,26 @@ export class Player extends Actor {
 
     super.update(dt);
     this.updateCamera(camera, dt);
+  }
+
+  /** Шаги отмеряются пройденным расстоянием, а не таймером — иначе они «плывут». */
+  _updateFootsteps(dt, audio) {
+    const speed = this.speedNow || 0;
+    if (this.onGround && speed > 0.6) {
+      this._stepDistance += speed * dt;
+      const stride = this.injuries.mobility === 'crawl' ? 1.1 : this.sprinting ? 2.6 : 2.0;
+      if (this._stepDistance >= stride) {
+        this._stepDistance = 0;
+        audio.play('step', { volume: 0.5, rate: 0.85 + Math.random() * 0.35 });
+      }
+    } else if (!this.onGround) {
+      this._stepDistance = 0;
+    }
+
+    if (this.onGround && !this._wasOnGround) {
+      audio.play('land', { volume: 0.55, rate: 0.9 + Math.random() * 0.2 });
+    }
+    this._wasOnGround = this.onGround;
   }
 
   tryShoot(combat, camera) {

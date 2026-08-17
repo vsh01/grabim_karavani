@@ -22,10 +22,13 @@ export const HEIGHT = 1.85;
 const HIP_Y = 0.95;
 const SHOULDER_Y = 1.45;
 
-let sharedMaterial = null;
+/**
+ * Материал у каждого персонажа свой.
+ * Это нужно ради вспышки при попадании: общий материал подсветил бы
+ * разом всех на карте, а так краснеет ровно тот, кого ударили.
+ */
 function bodyMaterial() {
-  if (!sharedMaterial) sharedMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
-  return sharedMaterial;
+  return new THREE.MeshLambertMaterial({ vertexColors: true });
 }
 
 /** Готовые «внешности» для фракций. */
@@ -90,6 +93,8 @@ export function createHumanoid(look) {
   const root = new THREE.Group();
   const joints = {};
   const parts = {};
+  // Все части тела делят один материал этой модели — вспышка красит их вместе.
+  const model = { root, joints, parts, weaponSlot: null, material: mat };
 
   const mesh = (geo) => {
     const m = new THREE.Mesh(geo, mat);
@@ -206,7 +211,8 @@ export function createHumanoid(look) {
   }
 
   root.scale.setScalar(L.build ?? 1);
-  return { root, joints, parts, weaponSlot };
+  model.weaponSlot = weaponSlot;
+  return model;
 }
 
 /** Простая процедурная анимация: ходьба, покой, замах, ползание. */
@@ -356,7 +362,7 @@ export function attachProstheticLimb(model, partKey, quality = 1) {
     }
   }
 
-  const mesh = new THREE.Mesh(limbGeometry(parts), bodyMaterial());
+  const mesh = new THREE.Mesh(limbGeometry(parts), model.material || bodyMaterial());
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.name = `${partKey}_prosthetic`;

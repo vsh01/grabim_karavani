@@ -1,6 +1,19 @@
-// Игровой HUD: полосы, золото, задача, подсказки, журнал, повязка на глазу.
+// Игровой HUD: полосы, золото, задача, подсказки, журнал, компас, повязка на глазу.
 import { MOBILITY } from '../systems/injury.js';
-import { formatTime, clamp } from '../core/utils.js';
+import { formatTime, clamp, angleDelta } from '../core/utils.js';
+
+/** Компас показывает сектор в ±90° от направления взгляда. */
+const COMPASS_HALF_ANGLE = Math.PI / 2;
+const CARDINALS = [
+  { label: 'С', bearing: 0 },
+  { label: 'СВ', bearing: Math.PI / 4 },
+  { label: 'В', bearing: Math.PI / 2 },
+  { label: 'ЮВ', bearing: (Math.PI * 3) / 4 },
+  { label: 'Ю', bearing: Math.PI },
+  { label: 'ЮЗ', bearing: -(Math.PI * 3) / 4 },
+  { label: 'З', bearing: -Math.PI / 2 },
+  { label: 'СЗ', bearing: -Math.PI / 4 },
+];
 
 export class Hud {
   constructor() {
@@ -18,12 +31,23 @@ export class Hud {
     this.weaponLine = document.getElementById('weapon-line');
     this.eyePatch = document.getElementById('eye-patch');
     this.vignette = document.getElementById('blood-vignette');
+    this.hitFlash = document.getElementById('hit-flash');
     this.fade = document.getElementById('fade');
     this.crosshair = document.getElementById('crosshair');
+    this.compassStrip = document.getElementById('compass-strip');
+    this.danger = document.getElementById('danger');
 
     this._logLines = [];
     this._lastStatus = '';
     this._lastMask = '';
+    this._hitFlash = 0;
+    /** Пул элементов компаса: пересоздавать их каждый кадр было бы расточительно. */
+    this._compassMarks = [];
+  }
+
+  /** Красная вспышка по краям, когда достаётся игроку. */
+  flashHit(strength = 1) {
+    this._hitFlash = Math.min(1, this._hitFlash + strength);
   }
 
   show() {
@@ -80,9 +104,98 @@ export class Hud {
     this.fade.classList.toggle('on', on);
   }
 
-  update(game) {
+  /**
+   * Компас: стороны света плюс отметки цели, ближайшего корована и дома.
+   * Без него игрок просто не знает, куда идти, и мир кажется пустым.
+   */
+  updateCompass(game) {
+    const p = game.player;
+    if (!p || !this.compassStrip) return;
+
+    const width = this.compassStrip.clientWidth || 420;
+    const heading = -p.yaw; // 0 — на север (-Z), по часовой стрелке
+    const marks = [];
+
+    for (const c of CARDINALS) {
+      marks.push({ label: c.label, bearing: c.bearing, cls: 'card' });
+    }
+
+    const bearingTo = (x, z) => Math.atan2(x - p.position.x, -(z - p.position.z));
+    const distTo = (x, z) => Math.round(Math.hypot(x - p.position.x, z - p.position.z));
+
+    // Ближайший корован — главная приманка игры, он должен быть видно всегда.
+    const near = game.caravans.nearest(p.position);
+    if (near) {
+      const c = near.caravan;
+      marks.push({
+        label: `корован ${distTo(c.position.x, c.position.z)}м`,
+        bearing: bearingTo(c.position.x, c.position.z),
+        cls: 'caravan',
+      });
+    }
+
+    // Точка текущего задания.
+    const goal = game.objectivePoint();
+    if (goal) {
+      marks.push({
+        label: `цель ${distTo(goal.x, goal.z)}м`,
+        bearing: bearingTo(goal.x, goal.z),
+        cls: 'goal',
+      });
+    }
+
+    // Родное поселение.
+    const home = game.homePoint();
+    if (home) {
+      marks.push({
+        label: `дом ${distTo(home.x, home.z)}м`,
+        bearing: bearingTo(home.x, home.z),
+        cls: 'home',
+      });
+    }
+
+    // Показываем только то, что попадает в сектор компаса.
+    const visible = [];
+    for (const m of marks) {
+      const delta = angleDelta(heading, m.bearing);
+      if (Math.abs(delta) > COMPASS_HALF_ANGLE) continue;
+      visible.push({ ...m, x: width / 2 + (delta / COMPASS_HALF_ANGLE) * (width / 2) });
+    }
+
+    while (this._compassMarks.length < visible.length) {
+      const el = document.createElement('div');
+      el.className = 'compass-mark';
+      this.compassStrip.appendChild(el);
+      this._compassMarks.push(el);
+    }
+    for (let i = 0; i < this._compassMarks.length; i++) {
+      const el = this._compassMarks[i];
+      const m = visible[i];
+      if (!m) {
+        el.style.display = 'none';
+        continue;
+      }
+      el.style.display = '';
+      el.className = `compass-mark ${m.cls}`;
+      el.textContent = m.label;
+      el.style.left = `${m.x}px`;
+    }
+  }
+
+  update(game, dt = 0) {
     const p = game.player;
     if (!p) return;
+
+    // Вспышка от полученного удара гаснет сама.
+    if (this._hitFlash > 0) {
+      this._hitFlash = Math.max(0, this._hitFlash - dt * 3.2);
+      this.hitFlash.style.opacity = String(this._hitFlash * 0.75);
+    } else if (this.hitFlash.style.opacity !== '0') {
+      this.hitFlash.style.opacity = '0';
+    }
+
+    this.updateCompass(game);
+    this.danger.classList.toggle('on', game.inCombat);
 
     this.barHp.style.width = `${clamp((p.health / p.maxHealth) * 100, 0, 100)}%`;
     this.barStam.style.width = `${clamp((p.stamina / p.maxStamina) * 100, 0, 100)}%`;
