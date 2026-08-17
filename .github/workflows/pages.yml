@@ -1,5 +1,10 @@
 name: Публикация на GitHub Pages
 
+# Разовая настройка перед первым запуском:
+#   Settings → Pages → Build and deployment → Source: GitHub Actions
+# Включить Pages из самого workflow нельзя: создание сайта требует админских
+# прав репозитория, а у GITHUB_TOKEN их не бывает.
+
 on:
   push:
     branches:
@@ -39,17 +44,13 @@ jobs:
           touch _site/.nojekyll
           du -sh _site
 
-      - name: Настроить Pages
-        # enablement: true включает Pages сам, если он ещё не включён в настройках.
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
       - name: Загрузить артефакт
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
       - name: Развернуть
+        # Если шаг падает с 404 — значит Pages ещё не включён в настройках
+        # репозитория с источником «GitHub Actions». См. комментарий сверху.
         id: deployment
         uses: actions/deploy-pages@v4
