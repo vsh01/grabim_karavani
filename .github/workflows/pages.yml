@@ -1,0 +1,55 @@
+name: Публикация на GitHub Pages
+
+on:
+  push:
+    branches:
+      - claude/3d-action-game-factions-ghcf20
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Катим одну версию за раз, но начатый деплой не обрываем на полпути.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Собрать статику
+        # Сборки нет и зависимостей нет: игра — это index.html, исходники
+        # и локальная копия Three.js. Просто складываем нужное в _site,
+        # чтобы в артефакт не поехали .git, тесты и служебные файлы.
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp -r src vendor _site/
+          touch _site/.nojekyll
+          du -sh _site
+
+      - name: Настроить Pages
+        # enablement: true включает Pages сам, если он ещё не включён в настройках.
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Загрузить артефакт
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Развернуть
+        id: deployment
+        uses: actions/deploy-pages@v4
